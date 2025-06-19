@@ -1,0 +1,37 @@
+.history-container {
+  max-width: 800px;
+  margin: 30px auto;
+  padding: 20px;
+}
+
+.history-container h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.category-block {
+  margin-bottom: 30px;
+}
+
+.category-block h3 {
+  background-color: #e3f2fd;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+.upload-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.upload-grid li {
+  list-style: none;
+  text-align: center;
+}
+
+.upload-grid img {
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
