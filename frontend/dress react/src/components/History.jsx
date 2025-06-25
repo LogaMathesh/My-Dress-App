@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import './History.css';
 
 export default function History({ username }) {
   const [uploads, setUploads] = useState([]);
   const [groupedUploads, setGroupedUploads] = useState({});
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   useEffect(() => {
     fetchHistory();
@@ -49,24 +51,89 @@ export default function History({ username }) {
     }
   };
 
+  const handleToggleFavorite = async (uploadId) => {
+    try {
+      const res = await fetch('http://localhost:5000/toggle_favorite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: uploadId, username: username }),
+      });
+
+      const result = await res.json();
+      if (result.status === 'success') {
+        // Update the upload in the state
+        const updatedUploads = uploads.map(upload => 
+          upload.id === uploadId 
+            ? { ...upload, favorite: result.favorite }
+            : upload
+        );
+        setUploads(updatedUploads);
+        setGroupedUploads(groupByPosition(updatedUploads));
+      } else {
+        alert('Failed to update favorite status.');
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      alert('Failed to update favorite status.');
+    }
+  };
+
+  // Filter uploads based on favorite status
+  const filteredUploads = showFavoritesOnly 
+    ? uploads.filter(upload => upload.favorite)
+    : uploads;
+
+  const filteredGroupedUploads = groupByPosition(filteredUploads);
+
   return (
-    <div>
-      <h2>Your Upload History</h2>
-      {uploads.length === 0 ? (
-        <p>No uploads yet.</p>
+    <div className="history-container">
+      <h2 className="history-title">Your Upload History</h2>
+      
+      {/* Filter Toggle */}
+      <div className="filter-controls">
+        <button 
+          onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+          className={`filter-button ${showFavoritesOnly ? 'show-favorites' : 'show-all'}`}
+        >
+          {showFavoritesOnly ? 'Show All' : 'Show Favorites Only'}
+        </button>
+        <span className="filter-status">
+          {showFavoritesOnly 
+            ? `Showing ${filteredUploads.length} favorite items` 
+            : `Showing all ${uploads.length} items`
+          }
+        </span>
+      </div>
+
+      {/* Main History Section */}
+      {filteredUploads.length === 0 ? (
+        <div className="no-uploads">
+          <p>{showFavoritesOnly ? 'No favorite uploads yet.' : 'No uploads yet.'}</p>
+        </div>
       ) : (
-        Object.keys(groupedUploads).map((position) => (
-          <div key={position}>
-            <h3>{position.toUpperCase()}</h3>
-            <ul style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-              {groupedUploads[position].map((upload) => (
-                <li key={upload.id} style={{ listStyle: 'none', textAlign: 'center' }}>
-                  <img src={upload.image_url} alt="uploaded" width="150" />
-                  <p><strong>Position:</strong> {upload.position}</p>
-                  <p><small>{new Date(upload.uploaded_at).toLocaleString()}</small></p>
-                  <button onClick={() => handleDelete(upload.id)} style={{ color: 'red' }}>
-                    Delete
-                  </button>
+        Object.keys(filteredGroupedUploads).map((position) => (
+          <div key={position} className="style-section">
+            <h3 className="style-title">{position.toUpperCase()}</h3>
+            <ul className="upload-grid">
+              {filteredGroupedUploads[position].map((upload) => (
+                <li key={upload.id} className={`upload-item ${upload.favorite ? 'favorite' : ''}`}>
+                  <div className="image-container">
+                    <img src={upload.image_url} alt="uploaded" className="upload-image" />
+                    <button 
+                      onClick={() => handleToggleFavorite(upload.id)}
+                      className={`favorite-button ${upload.favorite ? 'favorited' : ''}`}
+                    >
+                      {upload.favorite ? '❤️' : '🤍'}
+                    </button>
+                  </div>
+                  <div className="upload-info">
+                    <p><strong>Position:</strong> {upload.position}</p>
+                    <p><strong>Style:</strong> {upload.style}</p>
+                    <p className="upload-date">{new Date(upload.uploaded_at).toLocaleString()}</p>
+                    <button onClick={() => handleDelete(upload.id)} className="delete-button">
+                      Delete
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

@@ -22,6 +22,14 @@ conn = psycopg2.connect(
 )
 cur = conn.cursor()
 
+# Add favorite column to uploads table if it doesn't exist
+try:
+    cur.execute("ALTER TABLE uploads ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT FALSE")
+    conn.commit()
+except Exception as e:
+    print(f"Error adding favorite column: {e}")
+    conn.rollback()
+
 # Load zero-shot classification pipeline
 classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-base-patch32")
 
@@ -134,7 +142,7 @@ def classify():
 def get_history(username):
     try:
         cur.execute(
-            "SELECT id, image_path, position, style, color, uploaded_at FROM uploads WHERE username = %s ORDER BY uploaded_at DESC",
+            "SELECT id, image_path, position, style, color, uploaded_at, favorite FROM uploads WHERE username = %s ORDER BY uploaded_at DESC",
             (username,)
         )
         uploads = cur.fetchall()
@@ -147,7 +155,8 @@ def get_history(username):
                 'position': upload[2],
                 'style': upload[3],
                 'color': upload[4],
-                'uploaded_at': upload[5].isoformat()
+                'uploaded_at': upload[5].isoformat(),
+                'favorite': upload[6] if upload[6] is not None else False
             })
 
         return jsonify(results)
@@ -183,12 +192,12 @@ def get_suggestions():
     data = request.json
     destination = data['destination']  # We treat this as style
 
-    cur = conn.cursor()
-
+    # Use the global cursor instead of creating a new one
     cur.execute("""
-        SELECT image_path, uploaded_at, style, position
+        SELECT DISTINCT ON (md5_hash) image_path, uploaded_at, style, position, md5_hash
         FROM uploads
         WHERE style = %s
+        ORDER BY md5_hash, uploaded_at DESC
     """, (destination,))
 
     results = cur.fetchall()
@@ -201,9 +210,88 @@ def get_suggestions():
     } for r in results]
 
     return jsonify({'suggestions': suggestions})
+
 @app.route('/uploaded_images/<path:filename>')
 def serve_uploaded_image(filename):
     return send_from_directory(os.path.join(os.getcwd(), 'uploaded_images'), filename)
+
+@app.route('/toggle_favorite', methods=['POST'])
+def toggle_favorite():
+    data = request.get_json()
+    upload_id = data.get('upload_id')
+    username = data.get('username')
+
+    try:
+        # Get current favorite status
+        cur.execute("SELECT favorite FROM uploads WHERE id = %s AND username = %s", (upload_id, username))
+        result = cur.fetchone()
+        
+        if not result:
+            return jsonify({'status': 'error', 'message': 'Upload not found'}), 404
+        
+        current_favorite = result[0] if result[0] is not None else False
+        new_favorite = not current_favorite
+        
+        # Update favorite status
+        cur.execute("UPDATE uploads SET favorite = %s WHERE id = %s AND username = %s", 
+                   (new_favorite, upload_id, username))
+        conn.commit()
+        
+        return jsonify({'status': 'success', 'favorite': new_favorite})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/check-duplicates', methods=['GET'])
+def check_duplicates():
+    """Check for duplicate entries in the database"""
+    try:
+        cur.execute("""
+            SELECT image_path, COUNT(*) as count
+            FROM uploads
+            GROUP BY image_path
+            HAVING COUNT(*) > 1
+            ORDER BY count DESC
+        """)
+        
+        duplicates = cur.fetchall()
+        
+        if duplicates:
+            return jsonify({
+                'status': 'found',
+                'duplicates': [{'image_path': d[0], 'count': d[1]} for d in duplicates]
+            })
+        else:
+            return jsonify({'status': 'clean', 'message': 'No duplicates found'})
+            
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/clean-duplicates', methods=['POST'])
+def clean_duplicates():
+    """Remove duplicate entries, keeping only the most recent one for each image"""
+    try:
+        # Delete duplicates keeping only the most recent entry for each image_path
+        cur.execute("""
+            DELETE FROM uploads 
+            WHERE id NOT IN (
+                SELECT MAX(id) 
+                FROM uploads 
+                GROUP BY image_path
+            )
+        """)
+        
+        deleted_count = cur.rowcount
+        conn.commit()
+        
+        return jsonify({
+            'status': 'success', 
+            'message': f'Removed {deleted_count} duplicate entries'
+        })
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

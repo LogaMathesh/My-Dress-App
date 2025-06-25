@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import './Signup.css';
 
-
-export default function Signup() {
+export default function Signup({ onSignup }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSignup = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
+    setMessage('');
+    
     try {
       const res = await fetch('http://localhost:5000/signup', {
         method: 'POST',
@@ -16,21 +19,58 @@ export default function Signup() {
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
-      setMessage(res.ok ? 'Signup successful!' : data.error);
-    } catch (err) {
-      setMessage('Network error');
+      if (res.ok) {
+        setMessage('Signup successful! Welcome aboard!');
+        setTimeout(() => onSignup(data.user), 1500);
+      } else {
+        setMessage(data.error || 'Signup failed');
+      }
+    } catch (error) {
+      setMessage('Network error. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <form onSubmit={handleSignup}>
-      <h2>Signup</h2>
-      <input placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />
-      <br />
-      <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required />
-      <br />
-      <button type="submit">Signup</button>
-      <p>{message}</p>
+      <h2>Join FashionAI</h2>
+      
+      <div className="form-group">
+        <label htmlFor="username">Username</label>
+        <input
+          id="username"
+          type="text"
+          placeholder="Choose a username"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          required
+          disabled={isLoading}
+        />
+      </div>
+      
+      <div className="form-group">
+        <label htmlFor="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          placeholder="Create a strong password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          required
+          disabled={isLoading}
+        />
+      </div>
+      
+      <button type="submit" disabled={isLoading}>
+        {isLoading ? 'Creating Account...' : 'Create Account'}
+      </button>
+      
+      {message && (
+        <p className={message.includes('successful') ? 'success' : 'error'}>
+          {message}
+        </p>
+      )}
     </form>
   );
 }

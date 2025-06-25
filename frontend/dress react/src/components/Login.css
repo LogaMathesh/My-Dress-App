@@ -1,35 +1,185 @@
+/* Modern Login Styles */
 .login-container {
-  max-width: 400px;
-  margin: 50px auto;
-  padding: 24px;
-  border: 1px solid #ccc;
-  border-radius: 12px;
-  background-color: #f9f9f9;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-xl);
+  padding: 3rem 2.5rem;
+  max-width: 450px;
+  margin: 2rem auto;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+  animation: slideUp 0.6s ease-out;
+}
+
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  z-index: -1;
 }
 
 .login-container h2 {
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 2.5rem;
+  color: white;
+  font-size: 2.25rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.025em;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .login-container input {
   width: 100%;
-  padding: 10px;
-  margin: 10px 0;
-  border-radius: 6px;
-  border: 1px solid #aaa;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--border-radius-sm);
+  font-size: 1rem;
+  transition: var(--transition);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.login-container input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.login-container input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .login-container button {
   width: 100%;
-  padding: 10px;
-  background-color: #007bff;
+  padding: 1rem 1.5rem;
+  background: var(--primary-gradient);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--border-radius-sm);
+  font-size: 1.1rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: var(--transition);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.login-container button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.login-container button:hover::before {
+  left: 100%;
 }
 
 .login-container button:hover {
-  background-color: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+}
+
+.login-container button:active {
+  transform: translateY(0);
+}
+
+.login-container p {
+  text-align: center;
+  margin-top: 1.5rem;
+  padding: 0.75rem;
+  border-radius: var(--border-radius-sm);
+  font-weight: 500;
+  min-height: 1.5rem;
+}
+
+.login-container p.error {
+  background: rgba(255, 107, 107, 0.2);
+  color: #ffebee;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.login-container p.success {
+  background: rgba(67, 233, 123, 0.2);
+  color: #e8f5e8;
+  border: 1px solid rgba(67, 233, 123, 0.3);
+}
+
+/* Input focus animation */
+.form-group {
+  position: relative;
+}
+
+.form-group input:focus + label,
+.form-group input:not(:placeholder-shown) + label {
+  transform: translateY(-1.5rem) scale(0.85);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .login-container {
+    margin: 1rem;
+    padding: 2rem 1.5rem;
+  }
+  
+  .login-container h2 {
+    font-size: 2rem;
+  }
+  
+  .login-container input {
+    padding: 0.875rem 1rem;
+  }
+  
+  .login-container button {
+    padding: 0.875rem 1.25rem;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 1.5rem 1rem;
+  }
+  
+  .login-container h2 {
+    font-size: 1.75rem;
+    margin-bottom: 2rem;
+  }
 }

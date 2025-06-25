@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import './upload.css';
+import './Upload.css';
 
 export default function Upload({ username }) {
   const [image, setImage] = useState(null);
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);  // <-- Loading state added
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -16,7 +16,7 @@ export default function Upload({ username }) {
     formData.append('image', image);
     formData.append('username', username);
 
-    setIsLoading(true);  // Start loading
+    setIsLoading(true);
 
     try {
       const res = await fetch('http://localhost:5000/classify', {
@@ -30,22 +30,23 @@ export default function Upload({ username }) {
       setMessage('Upload failed');
       setResult(null);
     } finally {
-      setIsLoading(false);  // Stop loading
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="upload-container">
-      <h2>Upload and Classify Image</h2>
+      <h2>Upload Your Outfit</h2>
       <form onSubmit={handleUpload}>
         <input
           type="file"
+          accept="image/*"
           onChange={e => setImage(e.target.files[0])}
           required
-          disabled={isLoading}  // Disable input while loading
+          disabled={isLoading}
         />
         <button type="submit" disabled={isLoading}>
-          {isLoading ? 'Classifying...' : 'Classify'}
+          {isLoading ? 'Analyzing...' : 'Analyze Outfit'}
         </button>
       </form>
 
@@ -53,42 +54,26 @@ export default function Upload({ username }) {
       {isLoading && (
         <div className="spinner-container">
           <div className="spinner" />
-          <p>Classifying image, please wait...</p>
+          <p>Analyzing your outfit, please wait...</p>
         </div>
       )}
 
       {/* Display result only if not loading */}
       {!isLoading && result && (
-        <div>
-          <h3>Results:</h3>
+        <div className="results">
+          <h3>Analysis Results</h3>
           <p><strong>Position:</strong> {result.position}</p>
           <p><strong>Style:</strong> {result.style}</p>
           <p><strong>Color:</strong> {result.color}</p>
-          <img src={result.image_url} alt="Classified" width="200" />
+          <img src={result.image_url} alt="Analyzed outfit" />
         </div>
       )}
 
-      <p>{message}</p>
-
-      {/* CSS spinner styles */}
-      <style>{`
-        .spinner-container {
-          margin-top: 20px;
-          text-align: center;
-        }
-        .spinner {
-          margin: 0 auto 10px auto;
-          width: 40px;
-          height: 40px;
-          border: 4px solid rgba(0,0,0,0.1);
-          border-left-color: #09f;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      {message && (
+        <p className={`message ${message.includes('successful') ? 'success' : 'error'}`}>
+          {message}
+        </p>
+      )}
     </div>
   );
 }

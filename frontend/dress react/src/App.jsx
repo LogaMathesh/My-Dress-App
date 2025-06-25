@@ -5,20 +5,25 @@ import Footer from './components/Footer';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import History from './components/History';
+import Favorites from './components/Favorites';
 import Upload from './components/Upload';
 import Suggestions from './components/Suggestions';
 import Home from './components/Home';
+
 
 function App() {
   const [view, setView] = useState('home');
   const [user, setUser] = useState(null);
 
-  // Load user from localStorage on app load
+  // Load user and last visited page from localStorage on app load
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
+    const lastView = localStorage.getItem('lastView');
+    
     if (storedUser) {
       setUser(storedUser);
-      setView('dashboard');
+      // Use last visited page or default to 'home' instead of 'dashboard'
+      setView(lastView || 'home');
     }
   }, []);
 
@@ -26,19 +31,26 @@ function App() {
   const handleLogin = (username) => {
     setUser(username);
     localStorage.setItem('user', username);
-    setView('dashboard');
+    setView('home'); // Default to home after login
   };
 
   // Clear user from localStorage on logout
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('lastView');
     setView('home');
+  };
+
+  // Custom setView function that also saves to localStorage
+  const handleViewChange = (newView) => {
+    setView(newView);
+    localStorage.setItem('lastView', newView);
   };
 
   return (
     <div className="app">
-      <Header user={user} setView={setView} handleLogout={handleLogout} />
+      <Header user={user} setView={handleViewChange} handleLogout={handleLogout} />
       
       <main>
         {/* Unauthenticated routes */}
@@ -51,6 +63,7 @@ function App() {
           <>
             {view === 'dashboard' && <Upload username={user} />}
             {view === 'history' && <History username={user} />}
+            {view === 'favorites' && <Favorites username={user} />}
             {view === 'suggestions' && <Suggestions username={user} />}
           </>
         )}
