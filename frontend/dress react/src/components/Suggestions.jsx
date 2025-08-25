@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './Suggestions.css';
 
-export default function Suggestions() {
+export default function Suggestions({ username }) {
   const [destination, setDestination] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [message, setMessage] = useState('');
@@ -9,6 +9,10 @@ export default function Suggestions() {
 
   const fetchSuggestions = async () => {
     if (!destination) return;
+    if (!username) {
+      setMessage('Please log in to get dress suggestions.');
+      return;
+    }
     
     setLoading(true);
     setMessage('');
@@ -17,7 +21,7 @@ export default function Suggestions() {
       const res = await fetch('http://localhost:5000/get-suggestions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destination })
+        body: JSON.stringify({ destination, username })
       });
 
       const data = await res.json();
@@ -41,7 +45,12 @@ export default function Suggestions() {
     <div className="suggestions">
       <h2>Dress Suggestions</h2>
       
-      <div className="suggestions-container">
+      {!username ? (
+        <div className="message error">
+          Please log in to view your dress suggestions.
+        </div>
+      ) : (
+        <div className="suggestions-container">
         <div className="selection-section">
           <label>Select your destination:</label>
           <select 
@@ -50,7 +59,6 @@ export default function Suggestions() {
             onChange={(e) => setDestination(e.target.value)}
           >
             <option value="">--Select Destination--</option>
-            <option value="beach">🏖️ Beach</option>
             <option value="casual">👕 Casual</option>
             <option value="formal">👔 Formal</option>
             <option value="traditional">👘 Traditional</option>
@@ -84,7 +92,7 @@ export default function Suggestions() {
                 <div className="card-badge">{item.style}</div>
                 <img
                   className="card-image"
-                  src={`http://localhost:5000/${item.image_path}`}
+                  src={item.image_url}
                   alt={`${item.style} dress`}
                   onError={(e) => { 
                     e.target.src = 'https://via.placeholder.com/300x250/f0f0f0/999?text=Dress+Image'; 
@@ -115,7 +123,8 @@ export default function Suggestions() {
             ))}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
