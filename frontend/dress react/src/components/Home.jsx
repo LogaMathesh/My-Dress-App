@@ -1,9 +1,9 @@
 // src/components/Home.jsx
 import React from 'react';
-import './Home.css'; // optional for styling
+import './Home.css';
 import { Helmet } from 'react-helmet-async';
 
-export default function Home() {
+export default function Home({ setView }) {
   return (
     <div className="home-content">
       <Helmet>
@@ -48,8 +48,8 @@ export default function Home() {
         <h3>Ready to Transform Your Style?</h3>
         <p>Join thousands of fashion enthusiasts who trust our AI-powered recommendations</p>
         <div className="cta-buttons">
-          <button className="cta-button primary">Get Started Now</button>
-          <button className="cta-button secondary">Learn More</button>
+          <button className="cta-button primary" onClick={() => setView('signup')}>Get Started Now</button>
+          <button className="cta-button secondary" onClick={() => setView('about')}>Learn More</button>
         </div>
       </div>
     </div>

@@ -42,7 +42,8 @@
   flex-wrap: wrap;
 }
 
-.auth-buttons button {
+.btn,
+.auth-buttons .btn {
   padding: 0.625rem 1.25rem;
   font-weight: 600;
   font-size: 0.875rem;
@@ -60,7 +61,8 @@
   white-space: nowrap;
 }
 
-.auth-buttons button::before {
+.btn::before,
+.auth-buttons .btn::before {
   content: '';
   position: absolute;
   top: 0;
@@ -71,42 +73,47 @@
   transition: left 0.5s;
 }
 
-.auth-buttons button:hover::before {
+.btn:hover::before,
+.auth-buttons .btn:hover::before {
   left: 100%;
 }
 
-.auth-buttons button:hover {
+.btn:hover,
+.auth-buttons .btn:hover {
   background: rgba(255, 255, 255, 0.25);
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-.auth-buttons button:active {
+.btn:active,
+.auth-buttons .btn:active {
   transform: translateY(0);
 }
 
-/* Special styling for action buttons */
-.auth-buttons button:contains('📤'),
-.auth-buttons button:contains('❤️'),
-.auth-buttons button:contains('Suggestions') {
+/* Variants */
+.btn-primary {
+  background: var(--primary-gradient);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-outline {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.btn-gradient {
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
-
-.auth-buttons button:contains('📤'):hover,
-.auth-buttons button:contains('❤️'):hover,
-.auth-buttons button:contains('Suggestions'):hover {
+.btn-gradient:hover {
   background: linear-gradient(135deg, rgba(102, 126, 234, 1) 0%, rgba(118, 75, 162, 1) 100%);
 }
 
-/* Logout button special styling */
-.auth-buttons button:contains('Logout') {
+.btn-danger {
   background: linear-gradient(135deg, rgba(255, 107, 107, 0.8) 0%, rgba(229, 62, 62, 0.8) 100%);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
-
-.auth-buttons button:contains('Logout'):hover {
+.btn-danger:hover {
   background: linear-gradient(135deg, rgba(255, 107, 107, 1) 0%, rgba(229, 62, 62, 1) 100%);
 }
 

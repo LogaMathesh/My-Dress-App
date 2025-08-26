@@ -21,7 +21,7 @@ export default function Signup({ onSignup }) {
       const data = await res.json();
       if (res.ok) {
         setMessage('Signup successful! Welcome aboard!');
-        setTimeout(() => onSignup(data.user), 1500);
+        setTimeout(() => onSignup(username), 1500);
       } else {
         setMessage(data.error || 'Signup failed');
       }

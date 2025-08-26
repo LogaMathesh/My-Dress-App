@@ -3,6 +3,7 @@ import './Upload.css';
 
 export default function Upload({ username }) {
   const [image, setImage] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -41,7 +42,17 @@ export default function Upload({ username }) {
         <input
           type="file"
           accept="image/*"
-          onChange={e => setImage(e.target.files[0])}
+          onChange={e => {
+            const file = e.target.files[0];
+            setImage(file);
+            setResult(null);
+            if (file) {
+              const url = URL.createObjectURL(file);
+              setPreviewUrl(url);
+            } else {
+              setPreviewUrl('');
+            }
+          }}
           required
           disabled={isLoading}
         />
@@ -55,6 +66,14 @@ export default function Upload({ username }) {
         <div className="spinner-container">
           <div className="spinner" />
           <p>Analyzing your outfit, please wait...</p>
+        </div>
+      )}
+
+      {/* Local preview before upload */}
+      {!isLoading && previewUrl && !result && (
+        <div className="results">
+          <h3>Preview</h3>
+          <img src={previewUrl} alt="Selected preview" />
         </div>
       )}
 

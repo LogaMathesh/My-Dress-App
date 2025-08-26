@@ -9,6 +9,7 @@ import Favorites from './components/Favorites';
 import Upload from './components/Upload';
 import Suggestions from './components/Suggestions';
 import Home from './components/Home';
+import About from './components/About';
 
 
 function App() {
@@ -54,9 +55,10 @@ function App() {
       
       <main>
         {/* Unauthenticated routes */}
-        {view === 'home' && <Home />}
+        {view === 'home' && <Home setView={handleViewChange} />}
         {view === 'login' && !user && <Login onLogin={handleLogin} />}
         {view === 'signup' && !user && <Signup onSignup={handleLogin} />}
+        {view === 'about' && <About />}
         
         {/* Authenticated routes */}
         {user && (

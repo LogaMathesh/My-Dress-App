@@ -11,16 +11,16 @@ export default function Header({ user, setView, handleLogout }) {
       <div className="auth-buttons">
         {!user ? (
           <>
-            <button onClick={() => setView('login')}>🔐 Login</button>
-            <button onClick={() => setView('signup')}>📝 Signup</button>
+            <button className="btn btn-outline" onClick={() => setView('login')}>🔐 Login</button>
+            <button className="btn btn-primary" onClick={() => setView('signup')}>📝 Signup</button>
           </>
         ) : (
           <>
-            <button onClick={() => setView('dashboard')}>📤 Upload</button>
-            <button onClick={() => setView('history')}>📋 History</button>
-            <button onClick={() => setView('favorites')}>❤️ Favorites</button>
-            <button onClick={() => setView('suggestions')}>💡 Suggestions</button>
-            <button onClick={handleLogout}>🚪 Logout</button>
+            <button className="btn btn-gradient" onClick={() => setView('dashboard')}>📤 Upload</button>
+            <button className="btn btn-gradient" onClick={() => setView('history')}>📋 History</button>
+            <button className="btn btn-gradient" onClick={() => setView('favorites')}>❤️ Favorites</button>
+            <button className="btn btn-gradient" onClick={() => setView('suggestions')}>💡 Suggestions</button>
+            <button className="btn btn-danger" onClick={handleLogout}>🚪 Logout</button>
           </>
         )}
       </div>
