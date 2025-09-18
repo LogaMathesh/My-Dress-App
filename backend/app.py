@@ -7,7 +7,8 @@ import psycopg2
 from PIL import Image
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from transformers import pipeline
+from config import config
+from gemini_client import gemini_classifier
 
 UPLOAD_FOLDER = 'uploaded_images'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -36,35 +37,8 @@ except Exception as e:
     print(f"Error adding favorite column: {e}")
     conn.rollback()
 
-# Load zero-shot classification pipeline
-classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-base-patch32")
-
-# Improved prompt-engineered categories for better CLIP performance
-POSITION_CATEGORIES = [
-    "upper body clothing, shirt, blouse, top",
-    "lower body clothing, pants, skirt, trousers",
-    "full body clothing, dress, gown, jumpsuit"
-]
-
-STYLE_CATEGORIES = [
-    "formal business attire, professional clothing, office wear",
-    "traditional ethnic clothing, cultural dress, heritage wear",
-    "casual everyday clothing, relaxed wear, comfortable outfit"
-]
-
-COLOR_CATEGORIES = [
-    "red clothing, red dress, red shirt",
-    "blue clothing, blue dress, blue shirt", 
-    "green clothing, green dress, green shirt",
-    "black clothing, black dress, black shirt",
-    "white clothing, white dress, white shirt",
-    "yellow clothing, yellow dress, yellow shirt",
-    "orange clothing, orange dress, orange shirt",
-    "purple clothing, purple dress, purple shirt",
-    "brown clothing, brown dress, brown shirt",
-    "pink clothing, pink dress, pink shirt",
-    "gray clothing, gray dress, gray shirt"
-]
+# Classification categories are now managed in config.py
+# Gemini classifier is initialized in gemini_client.py
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 
@@ -73,338 +47,32 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-# Enhanced classification function with better prompt handling
-def classify_attribute(image, categories, clean=False):
-    """Classify attribute using CLIP with improved prompt engineering."""
+def classify_dress_attributes(image):
+    """Classify dress attributes using Gemini API."""
     try:
-        results = classifier(images=image, candidate_labels=categories)
-        if results and len(results) > 0:
-            # Sort by confidence score
-            sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
-            top_result = sorted_results[0]
-            
-            # Very low threshold to ensure we get results
-            if top_result['score'] > 0.05:  # Much lower threshold
-                label = top_result['label']
-                
-                if clean:  # Map back to simple labels for JSON response
-                    if "color" in label:
-                        # Extract color from prompt with more flexible matching
-                        color_map = {
-                            "red": "red", "blue": "blue", "green": "green", 
-                            "black": "black", "white": "white", "yellow": "yellow",
-                            "orange": "orange", "purple": "purple", "brown": "brown",
-                            "pink": "pink", "gray": "gray"
-                        }
-                        for color, clean_color in color_map.items():
-                            if color in label.lower():
-                                return clean_color
-                        # If no color found, return most common
-                        return "black"
-                    elif "clothing" in label or "garment" in label:
-                        if any(word in label.lower() for word in ["upper", "shirt", "blouse", "top", "t-shirt"]):
-                            return "upper"
-                        elif any(word in label.lower() for word in ["lower", "pants", "skirt", "trousers", "jeans"]):
-                            return "lower"
-                        elif any(word in label.lower() for word in ["full", "dress", "gown", "jumpsuit", "onesie"]):
-                            return "full"
-                        # Default to upper body if unclear
-                        return "upper"
-                    elif any(word in label.lower() for word in ["formal", "business", "professional", "office", "corporate", "attire"]):
-                        return "formal"
-                    elif any(word in label.lower() for word in ["traditional", "ethnic", "cultural", "heritage", "ceremonial"]):
-                        return "traditional"
-                    elif any(word in label.lower() for word in ["casual", "everyday", "relaxed", "comfortable", "street", "outfit"]):
-                        return "casual"
-                    # Default to casual if unclear
-                    return "casual"
-                
-                return label
-            else:
-                # Return sensible defaults instead of unknown
-                if "color" in categories[0]:
-                    return "black"
-                elif "clothing" in categories[0]:
-                    return "upper"
-                else:
-                    return "casual"
-        # Return sensible defaults instead of unknown
-        if "color" in categories[0]:
-            return "black"
-        elif "clothing" in categories[0]:
-            return "upper"
-        else:
-            return "casual"
-    except Exception as e:
-        print(f"Classification error: {e}")
-        # Return sensible defaults instead of unknown
-        if "color" in categories[0]:
-            return "black"
-        elif "clothing" in categories[0]:
-            return "upper"
-        else:
-            return "casual"
-
-
-def classify_all_attributes_efficient(image):
-    """Efficiently classify all attributes in a single CLIP call for better performance."""
-    try:
-        # Combine all categories into one comprehensive classification
-        all_categories = []
-        
-        # Position categories
-        all_categories.extend([
-            "upper body shirt blouse top",
-            "lower body pants skirt trousers", 
-            "full body dress gown jumpsuit"
-        ])
-        
-        # Style categories
-        all_categories.extend([
-            "formal business professional office",
-            "traditional ethnic cultural heritage",
-            "casual everyday relaxed comfortable"
-        ])
-        
-        # Color categories
-        all_categories.extend([
-            "red clothing", "blue clothing", "green clothing",
-            "black clothing", "white clothing", "yellow clothing",
-            "orange clothing", "purple clothing", "brown clothing",
-            "pink clothing", "gray clothing"
-        ])
-        
-        # Single CLIP call for all categories
-        results = classifier(images=image, candidate_labels=all_categories)
-        
-        if not results or len(results) == 0:
-            # Return sensible defaults instead of unknown
+        if not gemini_classifier.is_configured():
+            print("Gemini API not configured, using defaults")
             return {"position": "upper", "style": "casual", "color": "black"}
         
-        # Sort by confidence score
-        sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
-        
-        # Initialize results with defaults instead of unknown
-        classification = {"position": "upper", "style": "casual", "color": "black"}
-        
-        # Process results with very low threshold for better coverage
-        for result in sorted_results:
-            if result['score'] < 0.05:  # Very low threshold
-                continue
-                
-            label = result['label'].lower()
-            
-            # Determine position with more flexible matching
-            if any(word in label for word in ["upper", "shirt", "blouse", "top", "t-shirt", "garment"]):
-                classification["position"] = "upper"
-            elif any(word in label for word in ["lower", "pants", "skirt", "trousers", "jeans", "garment"]):
-                classification["position"] = "lower"
-            elif any(word in label for word in ["full", "dress", "gown", "jumpsuit", "onesie", "garment"]):
-                classification["position"] = "full"
-            
-            # Determine style with more flexible matching
-            if any(word in label for word in ["formal", "business", "professional", "office", "corporate", "attire"]):
-                classification["style"] = "formal"
-            elif any(word in label for word in ["traditional", "ethnic", "cultural", "heritage", "ceremonial"]):
-                classification["style"] = "traditional"
-            elif any(word in label for word in ["casual", "everyday", "relaxed", "comfortable", "street", "outfit"]):
-                classification["style"] = "casual"
-            
-            # Determine color with more flexible matching
-            color_map = {
-                "red": "red", "blue": "blue", "green": "green",
-                "black": "black", "white": "white", "yellow": "yellow",
-                "orange": "orange", "purple": "purple", "brown": "brown",
-                "pink": "pink", "gray": "gray"
-            }
-            for color, clean_color in color_map.items():
-                if color in label:
-                    classification["color"] = clean_color
-                    break
-        
-        return classification
-        
+        return gemini_classifier.classify_dress_attributes(image)
     except Exception as e:
-        print(f"Multi-attribute classification error: {e}")
-        # Return sensible defaults instead of unknown
+        print(f"Classification error: {e}")
         return {"position": "upper", "style": "casual", "color": "black"}
 
 
-def generate_enhanced_prompts():
-    """Generate enhanced prompts with better CLIP performance."""
-    return {
-        "position": [
-            "upper body garment, shirt, blouse, top, t-shirt",
-            "lower body garment, pants, skirt, trousers, jeans",
-            "full body garment, dress, gown, jumpsuit, onesie"
-        ],
-        "style": [
-            "formal professional business attire, office wear, corporate clothing",
-            "traditional cultural ethnic clothing, heritage dress, ceremonial wear",
-            "casual relaxed everyday clothing, street wear, comfortable outfit"
-        ],
-        "color": [
-            "bright red clothing", "deep blue clothing", "forest green clothing",
-            "jet black clothing", "pure white clothing", "sunny yellow clothing",
-            "vibrant orange clothing", "royal purple clothing", "warm brown clothing",
-            "soft pink clothing", "cool gray clothing"
-        ]
-    }
+# This function is replaced by classify_dress_attributes which uses Gemini API
 
 
-def classify_with_confidence_boost(image, attribute_type="all"):
-    """Classify with confidence boosting using multiple prompt variations."""
-    try:
-        enhanced_prompts = generate_enhanced_prompts()
-        
-        if attribute_type == "all":
-            # Combine all enhanced prompts for single classification
-            all_prompts = []
-            for category_prompts in enhanced_prompts.values():
-                all_prompts.extend(category_prompts)
-            
-            results = classifier(images=image, candidate_labels=all_prompts)
-            
-            if not results:
-                # Return sensible defaults instead of unknown
-                return {"position": "upper", "style": "casual", "color": "black"}
-            
-            # Process with confidence boosting
-            return process_confidence_boosted_results(results, enhanced_prompts)
-        
-        else:
-            # Single attribute classification with enhanced prompts
-            prompts = enhanced_prompts.get(attribute_type, [])
-            if not prompts:
-                # Return sensible defaults instead of unknown
-                if attribute_type == "position":
-                    return "upper"
-                elif attribute_type == "style":
-                    return "casual"
-                elif attribute_type == "color":
-                    return "black"
-                return "casual"
-            
-            results = classifier(images=image, candidate_labels=prompts)
-            if not results:
-                # Return sensible defaults instead of unknown
-                if attribute_type == "position":
-                    return "upper"
-                elif attribute_type == "style":
-                    return "casual"
-                elif attribute_type == "color":
-                    return "black"
-                return "casual"
-            
-            # Return top result if confidence is high enough
-            top_result = max(results, key=lambda x: x['score'])
-            if top_result['score'] > 0.1:  # Lower threshold
-                result = map_enhanced_prompt_to_clean(top_result['label'], attribute_type)
-                if result != "unknown":
-                    return result
-            
-            # Return sensible defaults instead of unknown
-            if attribute_type == "position":
-                return "upper"
-            elif attribute_type == "style":
-                return "casual"
-            elif attribute_type == "color":
-                return "black"
-            return "casual"
-            
-    except Exception as e:
-        print(f"Enhanced classification error: {e}")
-        return {"position": "unknown", "style": "unknown", "color": "unknown"}
+# Enhanced prompts are now handled by the Gemini API in gemini_client.py
 
 
-def process_confidence_boosted_results(results, enhanced_prompts):
-    """Process results with confidence boosting for better accuracy."""
-    # Initialize with sensible defaults instead of unknown
-    classification = {"position": "upper", "style": "casual", "color": "black"}
-    
-    # Sort by confidence score
-    sorted_results = sorted(results, key=lambda x: x['score'], reverse=True)
-    
-    # Process each result with very low threshold for better coverage
-    for result in sorted_results:
-        if result['score'] < 0.05:  # Very low threshold
-            continue
-            
-        label = result['label'].lower()
-        
-        # Determine position with more flexible matching
-        if any(word in label for word in ["upper", "shirt", "blouse", "top", "t-shirt", "garment"]):
-            classification["position"] = "upper"
-        elif any(word in label for word in ["lower", "pants", "skirt", "trousers", "jeans", "garment"]):
-            classification["position"] = "lower"
-        elif any(word in label for word in ["full", "dress", "gown", "jumpsuit", "onesie", "garment"]):
-            classification["position"] = "full"
-        
-        # Determine style with more flexible matching
-        if any(word in label for word in ["formal", "professional", "business", "office", "corporate", "attire"]):
-            classification["style"] = "formal"
-        elif any(word in label for word in ["traditional", "cultural", "ethnic", "heritage", "ceremonial"]):
-            classification["style"] = "traditional"
-        elif any(word in label for word in ["casual", "relaxed", "everyday", "street", "comfortable", "outfit"]):
-            classification["style"] = "casual"
-        
-        # Determine color with more flexible matching
-        color_map = {
-            "red": "red", "blue": "blue", "green": "green",
-            "black": "black", "white": "white", "yellow": "yellow",
-            "orange": "orange", "purple": "purple", "brown": "brown",
-            "pink": "pink", "gray": "gray"
-        }
-        for color, clean_color in color_map.items():
-            if color in label:
-                classification["color"] = clean_color
-                break
-    
-    return classification
+# This function is replaced by classify_dress_attributes using Gemini API
 
 
-def map_enhanced_prompt_to_clean(label, attribute_type):
-    """Map enhanced prompt results to clean labels."""
-    label_lower = label.lower()
-    
-    if attribute_type == "position":
-        if any(word in label_lower for word in ["upper", "shirt", "blouse", "top"]):
-            return "upper"
-        elif any(word in label_lower for word in ["lower", "pants", "skirt", "trousers"]):
-            return "lower"
-        elif any(word in label_lower for word in ["full", "dress", "gown", "jumpsuit"]):
-            return "full"
-    
-    elif attribute_type == "style":
-        if any(word in label_lower for word in ["formal", "professional", "business", "office"]):
-            return "formal"
-        elif any(word in label_lower for word in ["traditional", "cultural", "ethnic", "heritage"]):
-            return "traditional"
-        elif any(word in label_lower for word in ["casual", "relaxed", "everyday", "street"]):
-            return "casual"
-    
-    elif attribute_type == "color":
-        color_map = {
-            "red": "red", "blue": "blue", "green": "green",
-            "black": "black", "white": "white", "yellow": "yellow",
-            "orange": "orange", "purple": "purple", "brown": "brown",
-            "pink": "pink", "gray": "gray"
-        }
-        for color, clean_color in color_map.items():
-            if color in label_lower:
-                return clean_color
-    
-        # Default to black if unclear
-        return "black"
-    
-    # Return sensible defaults instead of unknown
-    if attribute_type == "position":
-        return "upper"
-    elif attribute_type == "style":
-        return "casual"
-    elif attribute_type == "color":
-        return "black"
-    return "casual"
+# This function is replaced by Gemini API classification logic
+
+
+# This function is replaced by Gemini API classification logic
 
 
 @app.route('/signup', methods=['POST'])
@@ -487,8 +155,8 @@ def classify():
             os.remove(file_path)
         return jsonify({'error': 'Invalid image file'}), 400
 
-    # Use efficient multi-attribute classification
-    classification = classify_all_attributes_efficient(img)
+    # Use Gemini API for classification
+    classification = classify_dress_attributes(img)
     position = classification["position"]
     style = classification["style"]
     color = classification["color"]
@@ -665,7 +333,7 @@ def clean_duplicates():
 
 @app.route('/test-classification', methods=['POST'])
 def test_classification():
-    """Test different classification methods for comparison."""
+    """Test Gemini API classification."""
     image_file = request.files.get('image')
     
     if not image_file:
@@ -685,49 +353,10 @@ def test_classification():
         
         img = Image.open(file_path)
         
-        # Test different classification methods
-        results = {}
-        
-        # Method 1: Original individual classification
+        # Test Gemini classification
         start_time = datetime.datetime.now()
-        position1 = classify_attribute(img, POSITION_CATEGORIES, clean=True)
-        style1 = classify_attribute(img, STYLE_CATEGORIES, clean=True)
-        color1 = classify_attribute(img, COLOR_CATEGORIES, clean=True)
-        time1 = (datetime.datetime.now() - start_time).total_seconds()
-        
-        results['method1_individual'] = {
-            'position': position1,
-            'style': style1,
-            'color': color1,
-            'time_seconds': time1,
-            'method': 'Individual CLIP calls'
-        }
-        
-        # Method 2: Efficient multi-attribute classification
-        start_time = datetime.datetime.now()
-        classification2 = classify_all_attributes_efficient(img)
-        time2 = (datetime.datetime.now() - start_time).total_seconds()
-        
-        results['method2_efficient'] = {
-            'position': classification2["position"],
-            'style': classification2["style"],
-            'color': classification2["color"],
-            'time_seconds': time2,
-            'method': 'Single CLIP call with all categories'
-        }
-        
-        # Method 3: Enhanced confidence-boosted classification
-        start_time = datetime.datetime.now()
-        classification3 = classify_with_confidence_boost(img, "all")
-        time3 = (datetime.datetime.now() - start_time).total_seconds()
-        
-        results['method3_enhanced'] = {
-            'position': classification3["position"],
-            'style': classification3["style"],
-            'color': classification3["color"],
-            'time_seconds': time3,
-            'method': 'Enhanced prompts with confidence boosting'
-        }
+        classification = classify_dress_attributes(img)
+        time_taken = (datetime.datetime.now() - start_time).total_seconds()
         
         # Clean up test file
         if os.path.exists(file_path):
@@ -735,8 +364,14 @@ def test_classification():
         
         return jsonify({
             'status': 'success',
-            'results': results,
-            'recommendation': get_recommendation(results)
+            'result': {
+                'position': classification["position"],
+                'style': classification["style"],
+                'color': classification["color"],
+                'time_seconds': time_taken,
+                'method': 'Gemini API classification'
+            },
+            'api_configured': gemini_classifier.is_configured()
         })
         
     except Exception as e:
@@ -746,93 +381,64 @@ def test_classification():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-def get_recommendation(results):
-    """Get recommendation based on classification results."""
-    # Find fastest method
-    fastest = min(results.values(), key=lambda x: x['time_seconds'])
-    
-    # Check for consistency across methods
-    positions = [r['position'] for r in results.values()]
-    styles = [r['style'] for r in results.values()]
-    colors = [r['color'] for r in results.values()]
-    
-    position_consistent = len(set(positions)) == 1 and positions[0] != 'unknown'
-    style_consistent = len(set(styles)) == 1 and styles[0] != 'unknown'
-    color_consistent = len(set(colors)) == 1 and colors[0] != 'unknown'
-    
-    consistency_score = sum([position_consistent, style_consistent, color_consistent])
-    
-    if consistency_score >= 2:
-        return f"High confidence results. Recommended method: {fastest['method']} (fastest: {fastest['time_seconds']:.3f}s)"
-    elif consistency_score >= 1:
-        return f"Moderate confidence. Recommended method: {fastest['method']} (fastest: {fastest['time_seconds']:.3f}s)"
-    else:
-        return f"Low confidence. Recommended method: Enhanced prompts for better accuracy (fastest: {fastest['time_seconds']:.3f}s)"
+# Removed: This function was specific to CLIP model comparison
 
 
-@app.route('/classify-enhanced', methods=['POST'])
-def classify_enhanced():
-    """Enhanced classification endpoint using the best performing method."""
-    image_file = request.files.get('image')
-    username = request.form.get('username')
+# This endpoint is now redundant since /classify uses Gemini API
+
+
+# Configuration endpoints for API key management
+@app.route('/config/api-key', methods=['POST'])
+def set_api_key():
+    """Set Gemini API key."""
+    data = request.get_json()
+    api_key = data.get('api_key')
     
-    if not image_file or not username:
-        return jsonify({'error': 'Image or username missing'}), 400
-    
-    if not allowed_file(image_file.filename):
-        return jsonify({'error': 'Unsupported file type'}), 400
-    
-    image_bytes = image_file.read()
-    image_hash = hashlib.md5(image_bytes).hexdigest()
-    
-    # Check duplicates
-    cur.execute(
-        "SELECT image_path, position, style, color FROM uploads WHERE username = %s AND md5_hash = %s",
-        (username, image_hash)
-    )
-    existing = cur.fetchone()
-    if existing:
-        image_url = f"http://localhost:5000/image/{os.path.basename(existing[0])}"
-        return jsonify({
-            'position': existing[1],
-            'style': existing[2],
-            'color': existing[3],
-            'message': 'Duplicate image already uploaded.',
-            'image_url': image_url
-        })
-    
-    # Save new image
-    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = secure_filename(f"{username}_{timestamp}_{image_file.filename}")
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-    
-    with open(file_path, 'wb') as f:
-        f.write(image_bytes)
+    if not api_key:
+        return jsonify({'error': 'API key is required'}), 400
     
     try:
-        img = Image.open(file_path)
-    except Exception:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        return jsonify({'error': 'Invalid image file'}), 400
-    
-    # Use enhanced classification
-    classification = classify_with_confidence_boost(img, "all")
-    
-    cur.execute(
-        "INSERT INTO uploads (username, image_path, position, style, color, md5_hash, uploaded_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-        (username, file_path, classification["position"], classification["style"], classification["color"], image_hash, datetime.datetime.now())
-    )
-    conn.commit()
-    
-    image_url = f"http://localhost:5000/image/{filename}"
+        success = config.set_gemini_api_key(api_key)
+        if success:
+            # Reinitialize classifier with new API key
+            gemini_classifier.__init__()
+            return jsonify({
+                'status': 'success',
+                'message': 'API key configured successfully',
+                'configured': gemini_classifier.is_configured()
+            })
+        else:
+            return jsonify({'error': 'Failed to save API key'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/config/status', methods=['GET'])
+def get_config_status():
+    """Get configuration status."""
     return jsonify({
-        'position': classification["position"],
-        'style': classification["style"],
-        'color': classification["color"],
-        'image_url': image_url,
-        'method': 'Enhanced CLIP classification'
+        'gemini_configured': config.is_configured(),
+        'model': config.get_gemini_model(),
+        'categories': config.get_classification_categories()
     })
+
+
+@app.route('/config/test-connection', methods=['POST'])
+def test_gemini_connection():
+    """Test Gemini API connection."""
+    try:
+        success, message = gemini_classifier.test_connection()
+        return jsonify({
+            'status': 'success' if success else 'error',
+            'message': message,
+            'configured': gemini_classifier.is_configured()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'configured': False
+        }), 500
 
 
 if __name__ == '__main__':
