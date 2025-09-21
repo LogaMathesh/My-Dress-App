@@ -10,7 +10,7 @@ import Upload from './components/Upload';
 import Suggestions from './components/Suggestions';
 import Home from './components/Home';
 import About from './components/About';
-
+import Chatbot from './components/Chatbot';
 
 function App() {
   const [view, setView] = useState('home');
@@ -55,7 +55,7 @@ function App() {
       
       <main>
         {/* Unauthenticated routes */}
-        {view === 'home' && <Home setView={handleViewChange} />}
+        {view === 'home' && <Home setView={handleViewChange} user={user} />}
         {view === 'login' && !user && <Login onLogin={handleLogin} />}
         {view === 'signup' && !user && <Signup onSignup={handleLogin} />}
         {view === 'about' && <About />}
@@ -67,6 +67,7 @@ function App() {
             {view === 'history' && <History username={user} />}
             {view === 'favorites' && <Favorites username={user} />}
             {view === 'suggestions' && <Suggestions username={user} />}
+            {view === 'chatbot' && <Chatbot currentUser={{ id: user }} />}
           </>
         )}
       </main>

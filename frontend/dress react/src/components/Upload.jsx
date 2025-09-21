@@ -7,6 +7,7 @@ export default function Upload({ username }) {
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isIndexing, setIsIndexing] = useState(false);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -35,6 +36,30 @@ export default function Upload({ username }) {
     }
   };
 
+  const handleIndexExisting = async () => {
+    setIsIndexing(true);
+    setMessage('');
+    
+    try {
+      const res = await fetch('http://localhost:5000/index-existing-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setMessage(`✅ Indexed ${data.indexed_count} images for chatbot!`);
+      } else {
+        setMessage(`❌ Error: ${data.error}`);
+      }
+    } catch (error) {
+      setMessage('❌ Failed to index images');
+    } finally {
+      setIsIndexing(false);
+    }
+  };
+
   return (
     <div className="upload-container">
       <h2>Upload Your Outfit</h2>
@@ -60,6 +85,19 @@ export default function Upload({ username }) {
           {isLoading ? 'Analyzing...' : 'Analyze Outfit'}
         </button>
       </form>
+
+      {/* Index existing images button */}
+      <div className="index-section">
+        <h3>🤖 Chatbot Integration</h3>
+        <p>Index your existing images for the AI chatbot to provide better recommendations.</p>
+        <button 
+          onClick={handleIndexExisting} 
+          disabled={isIndexing}
+          className="index-button"
+        >
+          {isIndexing ? 'Indexing...' : '📚 Index Existing Images'}
+        </button>
+      </div>
 
       {/* Loading spinner */}
       {isLoading && (

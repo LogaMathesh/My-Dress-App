@@ -8,6 +8,8 @@ from PIL import Image
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from transformers import pipeline
+from chatbot_routes import chatbot_bp
+from per_user_index import add_image_for_user
 
 UPLOAD_FOLDER = 'uploaded_images'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -17,6 +19,9 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB upload limit
 CORS(app)
+
+# Register chatbot blueprint
+app.register_blueprint(chatbot_bp)
 
 # PostgreSQL connection
 conn = psycopg2.connect(
@@ -38,6 +43,7 @@ except Exception as e:
 
 # Load zero-shot classification pipeline
 classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-base-patch32")
+
 
 # Improved prompt-engineered categories for better CLIP performance
 POSITION_CATEGORIES = [
@@ -499,6 +505,13 @@ def classify():
     )
     conn.commit()
 
+    # Also index the image for chatbot functionality
+    try:
+        add_image_for_user(username, file_path, style, color)
+        print(f"Image indexed for chatbot: {filename}")
+    except Exception as e:
+        print(f"Warning: Failed to index image for chatbot: {e}")
+
     image_url = f"http://localhost:5000/image/{filename}"
     return jsonify({
         'position': position,
@@ -661,6 +674,45 @@ def clean_duplicates():
     except Exception as e:
         conn.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/index-existing-images', methods=['POST'])
+def index_existing_images():
+    """Index all existing images for a user in the chatbot system"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        
+        if not username:
+            return jsonify({'error': 'Username required'}), 400
+        
+        # Get all existing uploads for the user
+        cur.execute(
+            "SELECT image_path, position, style, color FROM uploads WHERE username = %s",
+            (username,)
+        )
+        uploads = cur.fetchall()
+        
+        indexed_count = 0
+        errors = []
+        
+        for image_path, position, style, color in uploads:
+            if os.path.exists(image_path):
+                try:
+                    add_image_for_user(username, image_path, style, color)
+                    indexed_count += 1
+                except Exception as e:
+                    errors.append(f"Failed to index {os.path.basename(image_path)}: {str(e)}")
+        
+        return jsonify({
+            'message': f'Indexed {indexed_count} images for chatbot',
+            'indexed_count': indexed_count,
+            'total_images': len(uploads),
+            'errors': errors
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': 'Database error', 'details': str(e)}), 500
 
 
 @app.route('/test-classification', methods=['POST'])

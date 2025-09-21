@@ -1,9 +1,11 @@
 // src/components/Home.jsx
-import React from 'react';
+import React, { useState } from 'react';
 import './Home.css';
 import { Helmet } from 'react-helmet-async';
+import Chatbot from './Chatbot';
 
-export default function Home({ setView }) {
+export default function Home({ setView, user }) {
+  const [showChatbot, setShowChatbot] = useState(false);
   return (
     <div className="home-content">
       <Helmet>
@@ -52,6 +54,39 @@ export default function Home({ setView }) {
           <button className="cta-button secondary" onClick={() => setView('about')}>Learn More</button>
         </div>
       </div>
+
+      {/* Chatbot Icon - Only show if user is logged in */}
+      {user && (
+        <div className="chatbot-icon-container">
+          <button 
+            className="chatbot-icon-button"
+            onClick={() => setShowChatbot(true)}
+            title="Ask our AI Fashion Assistant"
+          >
+            💬
+          </button>
+        </div>
+      )}
+
+      {/* Chatbot Modal */}
+      {showChatbot && user && (
+        <div className="chatbot-modal-overlay" onClick={() => setShowChatbot(false)}>
+          <div className="chatbot-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="chatbot-modal-header">
+              <h3>💬 AI Fashion Assistant</h3>
+              <button 
+                className="chatbot-close-button"
+                onClick={() => setShowChatbot(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="chatbot-modal-content">
+              <Chatbot currentUser={{ id: user }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
