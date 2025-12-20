@@ -1,7 +1,8 @@
 import os
 import datetime
 import hashlib
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_file, make_response, abort
+
 from flask_cors import CORS
 import psycopg2
 from PIL import Image
@@ -10,18 +11,30 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from transformers import pipeline
 from chatbot_routes import chatbot_bp
 from per_user_index import add_image_for_user
+from config.settings import UPLOAD_FOLDER, MAX_CONTENT_LENGTH
+import mimetypes
 
-UPLOAD_FOLDER = 'uploaded_images'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+#updation
+from features.auth.routes import auth_bp 
+from features.classify.routes import classify_bp
+
+# UPLOAD_FOLDER = 'uploaded_images'
+# os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Initialize Flask App
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB upload limit
-CORS(app)
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    supports_credentials=True,
+)
 
 # Register chatbot blueprint
 app.register_blueprint(chatbot_bp)
+app.register_blueprint(auth_bp) 
+app.register_blueprint(classify_bp)
 
 # PostgreSQL connection
 conn = psycopg2.connect(
@@ -411,114 +424,126 @@ def map_enhanced_prompt_to_clean(label, attribute_type):
     elif attribute_type == "color":
         return "black"
     return "casual"
+# @app.route("/signup", methods=["POST", "OPTIONS"])
+# def signup():
+#     # ✅ Handle preflight FIRST
+#     if request.method == "OPTIONS":
+#         response = jsonify({"ok": True})
+#         response.headers.add("Access-Control-Allow-Origin", "*")
+#         response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
+#         response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
+#         return response, 200
 
+#     # ✅ Only POST reaches here
+#     data = request.get_json(force=True)
 
-@app.route('/signup', methods=['POST'])
-def signup():
-    data = request.get_json()
-    username = data['username']
-    password = data['password']
+#     username = data.get("username")
+#     password = data.get("password")
 
-    try:
-        password_hash = generate_password_hash(password)
-        cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, password_hash))
-        conn.commit()
-        return jsonify({"message": "Signup successful", "user": username}), 200
-    except Exception:
-        conn.rollback()
-        return jsonify({"error": "Username already exists or DB error"}), 400
+#     if not username or not password:
+#         return jsonify({"error": "Missing fields"}), 400
 
+#     try:
+#         password_hash = generate_password_hash(password)
+#         cur.execute(
+#             "INSERT INTO users (username, password) VALUES (%s, %s)",
+#             (username, password_hash),
+#         )
+#         conn.commit()
+#         return jsonify({"message": "Signup successful"}), 200
+#     except Exception:
+#         conn.rollback()
+#         return jsonify({"error": "User already exists"}), 400
 
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+# @app.route('/login', methods=['POST'])
+# def login():
+#     data = request.get_json()
+#     username = data.get('username')
+#     password = data.get('password')
 
-    try:
-        cur.execute("SELECT password FROM users WHERE username = %s", (username,))
-        result = cur.fetchone()
+#     try:
+#         cur.execute("SELECT password FROM users WHERE username = %s", (username,))
+#         result = cur.fetchone()
 
-        if result and check_password_hash(result[0], password):
-            return jsonify({"message": "Login successful", "user": username}), 200
-        else:
-            return jsonify({"error": "Invalid credentials"}), 401
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": "Database error", "details": str(e)}), 500
+#         if result and check_password_hash(result[0], password):
+#             return jsonify({"message": "Login successful", "user": username}), 200
+#         else:
+#             return jsonify({"error": "Invalid credentials"}), 401
+#     except Exception as e:
+#         conn.rollback()
+#         return jsonify({"error": "Database error", "details": str(e)}), 500
 
+# @app.route('/classify', methods=['POST'])
+# def classify():
+#     image_file = request.files.get('image')
+#     username = request.form.get('username')
 
-@app.route('/classify', methods=['POST'])
-def classify():
-    image_file = request.files.get('image')
-    username = request.form.get('username')
+#     if not image_file or not username:
+#         return jsonify({'error': 'Image or username missing'}), 400
 
-    if not image_file or not username:
-        return jsonify({'error': 'Image or username missing'}), 400
+#     if not allowed_file(image_file.filename):
+#         return jsonify({'error': 'Unsupported file type'}), 400
 
-    if not allowed_file(image_file.filename):
-        return jsonify({'error': 'Unsupported file type'}), 400
+#     image_bytes = image_file.read()
+#     image_hash = hashlib.md5(image_bytes).hexdigest()
 
-    image_bytes = image_file.read()
-    image_hash = hashlib.md5(image_bytes).hexdigest()
+#     # Check duplicates
+#     cur.execute(
+#         "SELECT image_path, position, style, color FROM uploads WHERE username = %s AND md5_hash = %s",
+#         (username, image_hash)
+#     )
+#     existing = cur.fetchone()
+#     if existing:
+#         image_url = f"http://localhost:5000/image/{os.path.basename(existing[0])}"
+#         return jsonify({
+#             'position': existing[1],
+#             'style': existing[2],
+#             'color': existing[3],
+#             'message': 'Duplicate image already uploaded.',
+#             'image_url': image_url
+#         })
 
-    # Check duplicates
-    cur.execute(
-        "SELECT image_path, position, style, color FROM uploads WHERE username = %s AND md5_hash = %s",
-        (username, image_hash)
-    )
-    existing = cur.fetchone()
-    if existing:
-        image_url = f"http://localhost:5000/image/{os.path.basename(existing[0])}"
-        return jsonify({
-            'position': existing[1],
-            'style': existing[2],
-            'color': existing[3],
-            'message': 'Duplicate image already uploaded.',
-            'image_url': image_url
-        })
+#     # Save new image
+#     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+#     filename = secure_filename(f"{username}_{timestamp}_{image_file.filename}")
+#     file_path = os.path.join(UPLOAD_FOLDER, filename)
 
-    # Save new image
-    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = secure_filename(f"{username}_{timestamp}_{image_file.filename}")
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+#     with open(file_path, 'wb') as f:
+#         f.write(image_bytes)
 
-    with open(file_path, 'wb') as f:
-        f.write(image_bytes)
+#     try:
+#         img = Image.open(file_path)
+#     except Exception:
+#         if os.path.exists(file_path):
+#             os.remove(file_path)
+#         return jsonify({'error': 'Invalid image file'}), 400
 
-    try:
-        img = Image.open(file_path)
-    except Exception:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        return jsonify({'error': 'Invalid image file'}), 400
+#     # Use efficient multi-attribute classification
+#     classification = classify_all_attributes_efficient(img)
+#     position = classification["position"]
+#     style = classification["style"]
+#     color = classification["color"]
 
-    # Use efficient multi-attribute classification
-    classification = classify_all_attributes_efficient(img)
-    position = classification["position"]
-    style = classification["style"]
-    color = classification["color"]
+#     cur.execute(
+#         "INSERT INTO uploads (username, image_path, position, style, color, md5_hash, uploaded_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+#         (username, file_path, position, style, color, image_hash, datetime.datetime.now())
+#     )
+#     conn.commit()
 
-    cur.execute(
-        "INSERT INTO uploads (username, image_path, position, style, color, md5_hash, uploaded_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-        (username, file_path, position, style, color, image_hash, datetime.datetime.now())
-    )
-    conn.commit()
+#     # Also index the image for chatbot functionality
+#     try:
+#         add_image_for_user(username, file_path, style, color)
+#         print(f"Image indexed for chatbot: {filename}")
+#     except Exception as e:
+#         print(f"Warning: Failed to index image for chatbot: {e}")
 
-    # Also index the image for chatbot functionality
-    try:
-        add_image_for_user(username, file_path, style, color)
-        print(f"Image indexed for chatbot: {filename}")
-    except Exception as e:
-        print(f"Warning: Failed to index image for chatbot: {e}")
-
-    image_url = f"http://localhost:5000/image/{filename}"
-    return jsonify({
-        'position': position,
-        'style': style,
-        'color': color,
-        'image_url': image_url
-    })
+#     image_url = f"http://localhost:5000/image/{filename}"
+#     return jsonify({
+#         'position': position,
+#         'style': style,
+#         'color': color,
+#         'image_url': image_url
+#     })
 
 
 @app.route('/history/<username>', methods=['GET'])
@@ -566,11 +591,22 @@ def delete_upload():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
-
-@app.route('/image/<filename>')
+@app.route("/image/<filename>")
 def get_image(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
 
+    if not os.path.exists(file_path):
+        abort(404)
+
+    mime_type, _ = mimetypes.guess_type(file_path)
+
+    response = make_response(send_file(file_path, mimetype=mime_type))
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+    response.headers["Cross-Origin-Embedder-Policy"] = "unsafe-none"
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
 
 @app.route('/get-suggestions', methods=['POST'])
 def get_suggestions():
@@ -600,9 +636,9 @@ def get_suggestions():
     return jsonify({'suggestions': suggestions})
 
 
-@app.route('/uploaded_images/<path:filename>')
-def serve_uploaded_image(filename):
-    return send_from_directory(os.path.join(os.getcwd(), 'uploaded_images'), filename)
+# @app.route('/uploaded_images/<path:filename>')
+# def serve_uploaded_image(filename):
+#     return send_from_directory(os.path.join(os.getcwd(), 'uploaded_images'), filename)
 
 
 @app.route('/toggle_favorite', methods=['POST'])

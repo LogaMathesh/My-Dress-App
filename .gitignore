@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+*.ipynb_checkpoints
+node_modules/
+backend/uploaded_images
