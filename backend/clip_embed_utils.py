@@ -3,9 +3,11 @@ import numpy as np
 from PIL import Image
 from transformers import CLIPModel, CLIPProcessor
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"   # Safer for your system, change to cuda if needed
+
 model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").to(device)
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+
 
 def embed_image(path):
     """Generate embedding for an image using CLIP model"""
@@ -20,6 +22,7 @@ def embed_image(path):
     except Exception as e:
         print(f"Error embedding image {path}: {e}")
         return None
+
 
 def embed_text(text):
     """Generate embedding for text using CLIP model"""

@@ -37,28 +37,41 @@ export default function Upload({ username }) {
   };
 
   const handleIndexExisting = async () => {
-    setIsIndexing(true);
-    setMessage('');
-    
-    try {
-      const res = await fetch('http://localhost:5000/index-existing-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
-      });
-      const data = await res.json();
-      
-      if (res.ok) {
-        setMessage(`✅ Indexed ${data.indexed_count} images for chatbot!`);
-      } else {
-        setMessage(`❌ Error: ${data.error}`);
-      }
-    } catch (error) {
-      setMessage('❌ Failed to index images');
-    } finally {
-      setIsIndexing(false);
+  if (!image) {
+    setMessage("Please select an image first.");
+    return;
+  }
+
+  setIsIndexing(true);
+  setMessage("");
+
+  const formData = new FormData();
+  formData.append("image", image);
+  formData.append("user_id", username);
+  formData.append("style", "Unknown");
+  formData.append("color", "Unknown");
+
+  try {
+    const res = await fetch("http://localhost:5000/chatbot/upload", {
+      method: "POST",
+      body: formData,     // IMPORTANT
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      setMessage(`✅ Image indexed for chatbot!`);
+    } else {
+      setMessage(`❌ Error: ${data.error}`);
     }
-  };
+  } catch (err) {
+    setMessage("❌ Failed to index image");
+  } finally {
+    setIsIndexing(false);
+  }
+};
+
+
 
   return (
     <div className="upload-container">

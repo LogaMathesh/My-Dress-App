@@ -2,109 +2,169 @@ import os
 import json
 import faiss
 import numpy as np
-from embed_utils import embed_image, embed_text
+from clip_embed_utils import embed_image, embed_text
 
+# -----------------------------
+# CONFIG
+# -----------------------------
 INDEX_DIR = "indexes"
 os.makedirs(INDEX_DIR, exist_ok=True)
 
+FAISS_DIM = 768   # CLIP ViT-Large Patch-14 outputs 1024-dim vectors
+
+
+# -----------------------------
+# PATH HELPERS
+# -----------------------------
 def _user_paths(user_id):
     """Get file paths for user's index and metadata"""
-    return (os.path.join(INDEX_DIR, f"{user_id}.index"),
-            os.path.join(INDEX_DIR, f"{user_id}_meta.json"))
+    idx_path = os.path.join(INDEX_DIR, f"{user_id}.index")
+    meta_path = os.path.join(INDEX_DIR, f"{user_id}_meta.json")
+    return idx_path, meta_path
 
-def _create_new_index(dim):
-    """Create a new FAISS index with the given dimension"""
-    return faiss.IndexIDMap(faiss.IndexFlatIP(dim))
 
-def load_user_index(user_id, dim):
-    """Load or create user's FAISS index and metadata"""
+# -----------------------------
+# INDEX MANAGEMENT
+# -----------------------------
+def _create_new_index():
+    """Create new FAISS index with correct CLIP dimension"""
+    return faiss.IndexIDMap(faiss.IndexFlatIP(FAISS_DIM))
+
+
+def load_user_index(user_id):
+    """Load FAISS index + metadata; create new if missing"""
     idx_path, meta_path = _user_paths(user_id)
+
+    # Existing index
     if os.path.exists(idx_path) and os.path.exists(meta_path):
         idx = faiss.read_index(idx_path)
         meta = json.load(open(meta_path))
-    else:
-        idx = _create_new_index(dim)
-        meta = {"_next_id": 1, "items": {}}
-        faiss.write_index(idx, idx_path)
-        json.dump(meta, open(meta_path, "w"))
+        return idx, meta
+
+    # Create new index
+    idx = _create_new_index()
+    meta = {"_next_id": 1, "items": {}}
+
+    faiss.write_index(idx, idx_path)
+    json.dump(meta, open(meta_path, "w"))
+
     return idx, meta
 
+
 def save_user_index(user_id, idx, meta):
-    """Save user's FAISS index and metadata"""
+    """Persist FAISS index + metadata"""
     idx_path, meta_path = _user_paths(user_id)
     faiss.write_index(idx, idx_path)
     json.dump(meta, open(meta_path, "w"))
 
+
+# -----------------------------
+# ADD IMAGE TO INDEX
+# -----------------------------
 def add_image_for_user(user_id, image_path, style=None, color=None):
-    """Add an image to user's index with optional metadata"""
-    # Check if image is already indexed
-    idx, meta = load_user_index(user_id, 512)  # Use default dimension for checking
+    """Add image embedding to user's FAISS index"""
+
+    # Ensure absolute path
+    abs_path = os.path.abspath(image_path)
+
+    # Load index + metadata
+    idx, meta = load_user_index(user_id)
+
+    # Prevent duplicates
     for item_id, item_data in meta["items"].items():
-        if item_data["path"] == image_path:
-            print(f"Image already indexed: {image_path}")
+        if item_data["path"] == abs_path:
+            print(f"Image already indexed: {abs_path}")
             return int(item_id)
-    
-    vec = embed_image(image_path)
+
+    # Generate CLIP embedding
+    vec = embed_image(abs_path)
     if vec is None:
+        print("❌ embed_image returned None")
         return None
-    
-    dim = vec.shape[0]
-    idx, meta = load_user_index(user_id, dim)
+
+    # Safety check: dimension must be 1024
+    if vec.shape[0] != FAISS_DIM:
+        print(f"❌ ERROR: Embedding dim {vec.shape[0]} != {FAISS_DIM}")
+        return None
+
+    # New vector ID
     nid = meta["_next_id"]
-    idx.add_with_ids(np.array([vec]), np.array([nid], dtype="int64"))
-    
-    # Store metadata including style and color if provided
+
+    # Add vector + id to FAISS index
+    idx.add_with_ids(
+        np.array([vec], dtype="float32"),
+        np.array([nid], dtype="int64")
+    )
+
+    # Save metadata
     meta["items"][str(nid)] = {
-        "path": image_path,
+        "path": abs_path,
         "style": style,
         "color": color
     }
+
+    # Increment next id
     meta["_next_id"] = nid + 1
+
+    # Save changes
     save_user_index(user_id, idx, meta)
-    print(f"Indexed new image: {image_path} with ID {nid}")
+
+    print(f"Indexed new image: {abs_path} with ID {nid}")
+    print("Vector shape:", vec.shape)
     return nid
 
+
+# -----------------------------
+# QUERY USER IMAGES
+# -----------------------------
 def query_user(user_id, text_query, top_k=3):
-    """Query user's index with text and return similar images"""
+    """Return images similar to text query"""
+
     vec = embed_text(text_query)
     if vec is None:
+        print("❌ embed_text returned None")
         return []
-    
-    idx, meta = load_user_index(user_id, vec.shape[0])
+
+    if vec.shape[0] != FAISS_DIM:
+        print(f"❌ ERROR: Text embedding dim {vec.shape[0]} != {FAISS_DIM}")
+        return []
+
+    idx, meta = load_user_index(user_id)
+
     if idx.ntotal == 0:
         print(f"No images indexed for user {user_id}")
         return []
-    
-    print(f"Searching {idx.ntotal} indexed images for user {user_id}")
-    
-    # Search for more results to account for potential duplicates
+
+    # Search for similarity
     search_k = min(top_k * 2, idx.ntotal)
-    D, I = idx.search(np.array([vec]), search_k)
-    
+    D, I = idx.search(np.array([vec], dtype="float32"), search_k)
+
     results = []
-    seen_paths = set()  # Track seen image paths to avoid duplicates
-    
-    print(f"Raw search results: {len(D[0])} items")
-    for i, (dist, rid) in enumerate(zip(D[0], I[0])):
-        if int(rid) == -1: 
+    seen_paths = set()
+
+    for dist, rid in zip(D[0], I[0]):
+        rid = int(rid)
+        if rid == -1:
             continue
-        item = meta["items"].get(str(int(rid)))
-        if item:
-            print(f"Result {i+1}: ID={rid}, Path={item['path']}, Score={dist:.3f}")
-            if item["path"] not in seen_paths:
-                seen_paths.add(item["path"])
-                results.append({
-                    "score": float(dist), 
-                    "path": item["path"],
-                    "style": item.get("style", "Unknown"),
-                    "color": item.get("color", "Unknown")
-                })
-                print(f"Added unique result: {item['path']}")
-                # Stop when we have enough unique results
-                if len(results) >= top_k:
-                    break
-            else:
-                print(f"Skipped duplicate: {item['path']}")
-    
-    print(f"Final results: {len(results)} unique images")
+
+        item = meta["items"].get(str(rid))
+        if not item:
+            continue
+
+        # avoid duplicates
+        if item["path"] in seen_paths:
+            continue
+
+        seen_paths.add(item["path"])
+
+        results.append({
+            "score": float(dist),
+            "path": item["path"],
+            "style": item.get("style", "Unknown"),
+            "color": item.get("color", "Unknown")
+        })
+
+        if len(results) >= top_k:
+            break
+
     return results

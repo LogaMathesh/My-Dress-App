@@ -10,6 +10,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from transformers import pipeline
 from chatbot_routes import chatbot_bp
 from per_user_index import add_image_for_user
+from flask import send_from_directory
 
 UPLOAD_FOLDER = 'uploaded_images'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -886,6 +887,9 @@ def classify_enhanced():
         'method': 'Enhanced CLIP classification'
     })
 
+@app.route('/image/<path:filename>')
+def serve_image(filename):
+    return send_from_directory("uploaded_images", filename)
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -39,15 +39,12 @@ def chatbot_upload():
         style = request.form.get('style', 'Unknown')
         color = request.form.get('color', 'Unknown')
         
-        # Create user directory
-        user_dir = os.path.join(UPLOAD_DIR, user_id)
-        os.makedirs(user_dir, exist_ok=True)
-        
         # Generate unique filename
         filename = secure_filename(file.filename)
         unique_filename = f"{uuid.uuid4().hex}_{filename}"
-        file_path = os.path.join(user_dir, unique_filename)
-        
+         # STORE ALL IMAGES IN uploaded_images/ (FLAT)
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
         # Save file
         file.save(file_path)
         
@@ -64,7 +61,9 @@ def chatbot_upload():
         }), 200
         
     except Exception as e:
+        print("UPLOAD ERROR >>>", repr(e))
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
 
 @chatbot_bp.route('/chatbot/query', methods=['POST'])
 def chatbot_query():
